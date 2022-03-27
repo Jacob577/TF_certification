@@ -362,7 +362,7 @@ es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=5)
 model.fit(callbacks=[es])
 ```
 
-# Module 4 Transfer learning
+# Module 5 Transfer learning
 
 In this chapter it will be discussed how to utilize pretrained models to train our own models. Mainly `MobileNet_V2`.
 
@@ -490,4 +490,8 @@ _ = plt.suptitle("Model predictions (blue: correct, red: incorrect)")
 ```
 
 ![](./images/flowers_mobileNet_v2.JPG)
+
+
+# Module 6 Saving and Loading Models
+In this chapter code snippets from loading and transfering models will be presented.
 

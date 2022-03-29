@@ -536,3 +536,56 @@ def plot_series(time, series, format="-", start=0, end=None, label=None):
 def trend(time, slope=0):
     return slope * time
 ``` -->
+
+**The most common metrixcs for evluating a forecasting model**
+```Python
+errors = forecast - actual
+mse = np.square(errors).mean()
+mae = np.abs(errors).menan()
+mape = np.abs(errors / x_valid).mean()
+```
+
+If large errors are easily damaged by large errors the best loss function might be the `MSE` and if it is not as impactful mae may be better. 
+
+**Moving averages forecasting:**
+```Python
+def moving_average_forecast(series, window_size):
+  """Forecasts the mean of the last few values.
+     If window_size=1, then this is equivalent to naive forecast"""
+  forecast = []
+  for time in range(len(series) - window_size):
+    forecast.append(series[time:time + window_size].mean())
+  return np.array(forecast)
+
+  def moving_average_forecast(series, window_size):
+  """Forecasts the mean of the last few values.
+     If window_size=1, then this is equivalent to naive forecast
+     This implementation is *much* faster than the previous one"""
+  mov = np.cumsum(series)
+  mov[window_size:] = mov[window_size:] - mov[:-window_size]
+  return mov[window_size - 1:-1] / window_size
+
+  moving_avg = moving_average_forecast(series, 30)[split_time - 30:]
+
+plt.figure(figsize=(10, 6))
+plot_series(time_valid, x_valid, label="Series")
+plot_series(time_valid, moving_avg, label="Moving average (30 days)")
+
+keras.metrics.mean_absolute_error(x_valid, moving_avg).numpy()
+```
+
+When preparing a dataset with a timewindow we can use §tf.data.Dataset.range()
+
+```Python
+dataset = tf.data.Dataset.range(10)
+for val in dataset:
+  print(val.numpy())
+
+#For example
+dataset = dataset.window(5, shift=1)
+for window_dataset in dataset:
+  for val in window_dataset:
+    print(val.numpy(), end=" ")
+  print() 
+```
+

@@ -495,3 +495,44 @@ _ = plt.suptitle("Model predictions (blue: correct, red: incorrect)")
 # Module 6 Saving and Loading Models
 In this chapter code snippets from loading and transfering models will be presented.
 
+**These are the libraries used for saving and loading models:**
+```Python
+!pip install -U tensorflow_hub
+!pip install -U tensorflow_datasets
+
+import time
+import numpy as np
+import matplotlib.pylab as plt
+
+import tensorflow as tf
+import tensorflow_hub as hub
+import tensorflow_datasets as tfds
+tfds.disable_progress_bar()
+
+from tensorflow.keras import layers
+```
+
+**Apparently running out o RAM so cannot run on cloud**
+
+# Return to this module
+
+# Module 7 Time-Series
+Imputation is the method of analyzing missing data.
+When predicting time-series we also use the test period as training period.
+
+**Common practice is to use a Roll-Forward Partitioning**
+That will take greater time however it will more accuraely represent the production.
+
+<!-- Here is a function to plot a time series:
+```Python
+def plot_series(time, series, format="-", start=0, end=None, label=None):
+    plt.plot(time[start:end], series[start:end], format, label=label)
+    plt.xlabel("Time")
+    plt.ylabel("Value")
+    if label:
+        plt.legend(fontsize=14)
+    plt.grid(True)
+
+def trend(time, slope=0):
+    return slope * time
+``` -->

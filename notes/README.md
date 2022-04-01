@@ -582,10 +582,218 @@ for val in dataset:
   print(val.numpy())
 
 #For example
-dataset = dataset.window(5, shift=1)
-for window_dataset in dataset:
-  for val in window_dataset:
-    print(val.numpy(), end=" ")
-  print() 
+dataset = dataset.window(5, shift=1, drop_remainder=True) #to drop remeinders
+
+dataset = dataset.flat_map(lambda window: window.batch(5)) #converts to tensors
+
+#if we want to use the last data point as a target we can use:
+dataset = dataset.map(lambda window: (window[:-1], window[-1]))
+
+#We most likely need to shufle the data around, it can be done with:
+dataset = dataset.shuffle(buffer_size=10)
+
+#We need to use batch method:
+dataset = dataset.batch(2).prefetch(1)
+
+# for window_dataset in dataset:
+#   for val in window_dataset:
+#     print(val.numpy(), end=" ")
+#   print() 
 ```
 
+**Here are some direct copies of the notebook to eventually use in the code**
+
+```Python
+import tensorflow as tf
+
+dataset = tf.data.Dataset.range(10)
+for val in dataset:
+    print(val.numpy())
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.window(5, shift=1)
+for window_dataset in dataset:
+    for val in window_dataset:
+        print(val.numpy(), end=" ")
+    print()
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.window(5, shift=1, drop_remainder=True)
+for window_dataset in dataset:
+    for val in window_dataset:
+        print(val.numpy(), end=" ")
+    print()
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.window(5, shift=1, drop_remainder=True)
+dataset = dataset.flat_map(lambda window: window.batch(5))
+for window in dataset:
+    print(window.numpy())
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.window(5, shift=1, drop_remainder=True)
+dataset = dataset.flat_map(lambda window: window.batch(5))
+dataset = dataset.map(lambda window: (window[:-1], window[-1:]))
+for x, y in dataset:
+    print(x.numpy(), y.numpy())
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.window(5, shift=1, drop_remainder=True)
+dataset = dataset.flat_map(lambda window: window.batch(5))
+dataset = dataset.map(lambda window: (window[:-1], window[-1:]))
+dataset = dataset.shuffle(buffer_size=10)
+for x, y in dataset:
+    print(x.numpy(), y.numpy())
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.window(5, shift=1, drop_remainder=True)
+dataset = dataset.flat_map(lambda window: window.batch(5))
+dataset = dataset.map(lambda window: (window[:-1], window[-1:]))
+dataset = dataset.shuffle(buffer_size=10)
+dataset = dataset.batch(2).prefetch(1)
+for x, y in dataset:
+    print("x =", x.numpy())
+    print("y =", y.numpy())
+
+def window_dataset(series, window_size, batch_size=32,
+                   shuffle_buffer=1000):
+    dataset = tf.data.Dataset.from_tensor_slices(series)
+    dataset = dataset.window(window_size + 1, shift=1, drop_remainder=True)
+    dataset = dataset.flat_map(lambda window: window.batch(window_size + 1))
+    dataset = dataset.shuffle(shuffle_buffer)
+    dataset = dataset.map(lambda window: (window[:-1], window[-1]))
+    dataset = dataset.batch(batch_size).prefetch(1)
+    return dataset
+```
+Generally it is the last unction we will be using.
+
+Huber loss converges much better
+
+**Let's create some data!**
+
+```Python
+split_time = 1000
+time_train = time[:split_time]
+x_train = series[:split_time]
+time_valid = time[split_time:]
+x_valid = series[split_time:]
+```
+**A great way to reach the learning rate is to use a function like this. (this is for time-series)**
+```Python
+keras.backend.clear_session()
+tf.random.set_seed(42)
+np.random.seed(42)
+
+window_size = 30
+train_set = window_dataset(x_train, window_size)
+
+model = keras.models.Sequential([
+  keras.layers.Dense(1, input_shape=[window_size])
+])
+
+lr_schedule = keras.callbacks.LearningRateScheduler(
+    lambda epoch: 1e-6 * 10**(epoch / 30))
+optimizer = keras.optimizers.SGD(lr=1e-6, momentum=0.9)
+model.compile(loss=keras.losses.Huber(),
+              optimizer=optimizer,
+              metrics=["mae"])
+history = model.fit(train_set, epochs=100, callbacks=[lr_schedule])
+```
+lr_schedueler dynamically changes the learning rate as we go along in the model. This is a quick learning rate.
+
+If we then plot the learning rate we will see the optimal learning rate roughly.
+![](./images/learning_rate.JPG)
+
+We could pick for example 10^-5.
+
+**Example of RNN model**
+```Python
+keras.backend.clear_session()
+tf.random.set_seed(42)
+np.random.seed(42)
+
+window_size = 30
+train_set = window_dataset(x_train, window_size, batch_size=128)
+valid_set = window_dataset(x_valid, window_size, batch_size=128)
+
+model = keras.models.Sequential([
+  keras.layers.Lambda(lambda x: tf.expand_dims(x, axis=-1),
+                      input_shape=[None]),
+  keras.layers.SimpleRNN(100, return_sequences=True),
+  keras.layers.SimpleRNN(100),
+  keras.layers.Dense(1),
+  keras.layers.Lambda(lambda x: x * 200.0)
+])
+optimizer = keras.optimizers.SGD(lr=1.5e-6, momentum=0.9)
+model.compile(loss=keras.losses.Huber(),
+              optimizer=optimizer,
+              metrics=["mae"])
+early_stopping = keras.callbacks.EarlyStopping(patience=50)
+model_checkpoint = keras.callbacks.ModelCheckpoint(
+    "my_checkpoint", save_best_only=True)
+model.fit(train_set, epochs=500,
+          validation_data=valid_set,
+          callbacks=[early_stopping, model_checkpoint])
+
+
+model = keras.models.load_model("my_checkpoint")
+
+rnn_forecast = model_forecast(
+    model,
+    series[split_time - window_size:-1],
+    window_size)[:, 0]
+
+plt.figure(figsize=(10, 6))
+plot_series(time_valid, x_valid)
+plot_series(time_valid, rnn_forecast)
+
+```
+
+**Example of sequence to sequence model**
+
+Firstly we need to change the format of the data, this is additional to the premade functions created
+```Python
+def seq2seq_window_dataset(series, window_size, batch_size=32,
+                           shuffle_buffer=1000):
+    series = tf.expand_dims(series, axis=-1)
+    ds = tf.data.Dataset.from_tensor_slices(series)
+    ds = ds.window(window_size + 1, shift=1, drop_remainder=True)
+    ds = ds.flat_map(lambda w: w.batch(window_size + 1))
+    ds = ds.shuffle(shuffle_buffer)
+    ds = ds.map(lambda w: (w[:-1], w[1:]))
+    return ds.batch(batch_size).prefetch(1)
+```
+
+Thereafter we can create the model!
+```Python
+keras.backend.clear_session()
+tf.random.set_seed(42)
+np.random.seed(42)
+
+window_size = 30
+train_set = seq2seq_window_dataset(x_train, window_size,
+                                   batch_size=128)
+
+#If only inted to test the learning rate, we can comment out the valid_set
+valid_set = seq2seq_window_dataset(x_valid, window_size,
+                                   batch_size=128)
+
+#Instead of multiplying with 200, we could normalize the input data
+
+model = keras.models.Sequential([
+  keras.layers.SimpleRNN(100, return_sequences=True,
+                         input_shape=[None, 1]),
+  keras.layers.SimpleRNN(100, return_sequences=True),
+  keras.layers.Dense(1),
+  keras.layers.Lambda(lambda x: x * 200.0)
+])
+optimizer = keras.optimizers.SGD(lr=1e-6, momentum=0.9)
+model.compile(loss=keras.losses.Huber(),
+              optimizer=optimizer,
+              metrics=["mae"])
+early_stopping = keras.callbacks.EarlyStopping(patience=10)
+model.fit(train_set, epochs=500,
+          validation_data=valid_set,
+          callbacks=[early_stopping])
+
+```

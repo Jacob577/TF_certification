@@ -1000,3 +1000,64 @@ plot_series(time_valid, rnn_forecast)
 
 keras.metrics.mean_absolute_error(x_valid, rnn_forecast).numpy()
 ```
+
+**Conv nets for time series can be useful! Let's explore!**
+
+Kernels must be carefully chosen so that the model does'nt over fit or under-performes.
+Using only CNN is not very efficient though a waveNet architecture is more common and more usable. 
+
+![](./images/wavenetJPG.JPG)
+
+lower layers acts as the short term memory and the higher layers will notice the higher trends.
+```Python
+keras.backend.clear_session()
+tf.random.set_seed(42)
+np.random.seed(42)
+
+window_size = 64
+train_set = seq2seq_window_dataset(x_train, window_size,
+                                   batch_size=128)
+valid_set = seq2seq_window_dataset(x_valid, window_size,
+                                   batch_size=128)
+
+model = keras.models.Sequential()
+model.add(keras.layers.InputLayer(input_shape=[None, 1]))
+for dilation_rate in (1, 2, 4, 8, 16, 32):
+    model.add(
+      keras.layers.Conv1D(filters=32,
+                          kernel_size=2,
+                          strides=1,
+                          dilation_rate=dilation_rate,
+                          padding="causal",
+                          activation="relu")
+    )
+model.add(keras.layers.Conv1D(filters=1, kernel_size=1))
+optimizer = keras.optimizers.Adam(lr=3e-4)
+# lr_schedule = keras.callbacks.LearningRateScheduler(
+#     lambda epoch: 1e-4 * 10**(epoch / 30))
+model.compile(loss=keras.losses.Huber(),
+              optimizer=optimizer,
+              metrics=["mae"])
+
+model_checkpoint = keras.callbacks.ModelCheckpoint(
+    "my_checkpoint.h5", save_best_only=True)
+early_stopping = keras.callbacks.EarlyStopping(patience=50)
+history = model.fit(train_set, epochs=500,
+                    validation_data=valid_set,
+                    callbacks=[early_stopping, model_checkpoint])
+```
+
+```Python
+model = keras.models.load_model("my_checkpoint.h5")
+
+cnn_forecast = model_forecast(model, series[..., np.newaxis], window_size)
+cnn_forecast = cnn_forecast[split_time - window_size:-1, -1, 0]
+
+plt.figure(figsize=(10, 6))
+plot_series(time_valid, x_valid)
+plot_series(time_valid, cnn_forecast)
+```
+
+```Python
+keras.metrics.mean_absolute_error(x_valid, cnn_forecast).numpy()
+```

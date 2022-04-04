@@ -907,7 +907,7 @@ valid_set = sequential_window_dataset(x_valid, window_size=window_size)
 
 model = keras.models.Sequential([
   keras.layers.SimpleRNN(100, return_sequences=True, stateful=True,
-                         batch_input_shape=[1,None,1]),
+                         batch_input_shape=[1,None,1]), # Here we state the batch shape instead of the input_shape
   keras.layers.SimpleRNN(100, return_sequences=True, stateful=True),
   keras.layers.Dense(1),
   keras.layers.Lambda(lambda x: x*200.0)
@@ -949,3 +949,54 @@ plot_series(time_valid, rnn_forecast)
 keras.metrics.mean_absolute_error(x_valid, rnn_forecast).numpy()
 ```
 
+
+**LSTM cells Long Short Term Memory**
+
+A bit more complex model however may be more accurate. Accurate to a degree of 100 time steps and slightly more. 
+![](./images/LSTM.JPG)
+
+The only difference between simpleRNN layers we just replace it with LSTM
+
+```Python
+# Here is the LSTM model! 
+keras.backend.clear_session()
+tf.random.set_seed(42)
+np.random.seed(42)
+
+window_size = 30
+train_set = sequential_window_dataset(x_train, window_size)
+valid_set = sequential_window_dataset(x_valid, window_size)
+
+model = keras.models.Sequential([
+  keras.layers.LSTM(100, return_sequences=True, stateful=True,
+                         batch_input_shape=[1, None, 1]),
+  keras.layers.LSTM(100, return_sequences=True, stateful=True),
+  keras.layers.Dense(1),
+  keras.layers.Lambda(lambda x: x * 200.0)
+])
+optimizer = keras.optimizers.SGD(lr=5e-7, momentum=0.9)
+model.compile(loss=keras.losses.Huber(),
+              optimizer=optimizer,
+              metrics=["mae"])
+reset_states = ResetStatesCallback()
+model_checkpoint = keras.callbacks.ModelCheckpoint(
+    "my_checkpoint.h5", save_best_only=True)
+early_stopping = keras.callbacks.EarlyStopping(patience=50)
+model.fit(train_set, epochs=500,
+          validation_data=valid_set,
+          callbacks=[early_stopping, model_checkpoint, reset_states])
+```
+
+**Thereafter we perform:**
+```Python
+model = keras.models.load_model("my_checkpoint.h5")
+
+rnn_forecast = model.predict(series[np.newaxis, :, np.newaxis])
+rnn_forecast = rnn_forecast[0, split_time - 1:-1, 0]
+
+plt.figure(figsize=(10, 6))
+plot_series(time_valid, x_valid)
+plot_series(time_valid, rnn_forecast)
+
+keras.metrics.mean_absolute_error(x_valid, rnn_forecast).numpy()
+```

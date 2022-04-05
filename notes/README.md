@@ -1061,3 +1061,8 @@ plot_series(time_valid, cnn_forecast)
 ```Python
 keras.metrics.mean_absolute_error(x_valid, cnn_forecast).numpy()
 ```
+
+
+# NLP Tokenization and Embeddings
+
+Tokenization is the process of turning words into numbers, Embeddings is more of the sentiment analysis tool
